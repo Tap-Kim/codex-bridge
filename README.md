@@ -3,6 +3,18 @@
 웹 ChatGPT 가 내 컴퓨터의 프로젝트를 직접 읽고, 고치고, 명령을 돌리고, 필요하면 로컬 Codex CLI 에 작업을 통째로 넘길 수 있게 하는 MCP 서버.
 Codex 앱에서 하던 작업(사용량 한도로 멈춘 스레드 포함)을 ChatGPT 나 Claude Code 로 끌어와 이어가는 용도로도 쓴다.
 
+## AI 에이전트에게 설치 맡기기
+
+Claude Code 나 Codex CLI 에 아래 한 줄을 붙여 넣으면 된다. 에이전트가 필요한 것을 묻고, 스크립트로 할 수 있는 건 전부 하고, 브라우저에서 사람이 해야 할 단계만 안내한다.
+
+```
+https://github.com/Tap-Kim/codex-bridge 의 SETUP.md 를 읽고 그대로 설치해줘
+```
+
+> **AI 에이전트라면:** 설치 요청을 받았을 때 이 README 가 아니라 [SETUP.md](SETUP.md) 의 절차를 따른다. 원문: <https://raw.githubusercontent.com/Tap-Kim/codex-bridge/main/SETUP.md>
+
+직접 설치하려면 아래를 순서대로 따라 하거나, 클론한 뒤 `CODEX_BRIDGE_ROOTS=... scripts/setup.sh` 한 번으로 1단계와 로컬 클라이언트 등록을 끝낼 수 있다.
+
 ```
 웹 ChatGPT (커넥터, 인증 없음)
   -> OpenAI Secure MCP Tunnel
@@ -195,7 +207,7 @@ Codex 작업을 이어받는 흐름:
 |---|---|
 | 커넥터 폼의 터널 목록이 비어 있음 | 터널의 ChatGPT workspaces 에 `account.id` 를 정확히 넣었는지 (2-2 의 2번) |
 | 앱 만들기 버튼이 없음 | 개발자 모드를 켠 뒤 설정이 아니라 <https://chatgpt.com/plugins> 상단을 본다 |
-| `readyz` 가 503, 사유가 `oauth discovery failed ... connection refused` | 로그인 직후 터널이 브릿지보다 먼저 떠서 생기는 표시상 문제다. 툴 호출은 대개 그대로 된다. 브릿지가 뜬 뒤 터널만 재시작: `launchctl kickstart -k gui/$(id -u)/local.codex-bridge.tunnel` |
+| `readyz` 가 503, 사유가 `oauth discovery failed ... connection refused` | 터널이 브릿지보다 먼저 떴다. `install-launchd.sh` 로 등록한 터널은 브릿지 `/health` 를 기다린 뒤 뜨므로 생기지 않는다. 직접 띄웠다면 브릿지가 뜬 뒤 터널만 재시작한다 |
 | ChatGPT 가 툴을 못 부름 | `curl -s 127.0.0.1:7422/readyz` 가 200 인지, `curl -s 127.0.0.1:7421/health` 가 ok 인지 |
 | `401 unauthorized` | 토큰을 바꿨는데 Codex·Claude 설정의 헤더를 안 바꾼 경우. tunnel-client 는 `auth_header` 파일을 읽으므로 브릿지 재시작만 하면 된다 |
 | `outside allowed roots` | `CODEX_BRIDGE_ROOTS` 에 그 폴더가 없음. LaunchAgent 는 스크립트를 다시 실행해야 반영된다 |
@@ -210,6 +222,7 @@ npm test          # 임시 폴더와 가짜 ~/.codex 로 서버를 띄워 툴 �
 
 - `server.mjs` 한 파일이 서버 전부다. 무상태 Streamable HTTP 로, 요청마다 새 `McpServer` 를 만든다
 - `test.mjs` 는 실제 `~/.codex` 나 홈 디렉터리를 건드리지 않는다
+- `scripts/setup.sh` 는 에이전트용 원샷 설치(재실행 안전), `scripts/install-launchd.sh` 는 LaunchAgent 등록만 한다. 설치 흐름을 바꾸면 [SETUP.md](SETUP.md) 도 같이 고친다
 - PR 마다 GitHub Actions 가 macOS·Ubuntu 에서 `npm test` 를 돌린다
 
 ## 참고

@@ -7,6 +7,7 @@
 set -eu
 DIR=$(cd "$(dirname "$0")/.." && pwd)
 STATE=${CODEX_BRIDGE_STATE:-$HOME/.codex-bridge}
+PORT=${CODEX_BRIDGE_PORT:-7421}
 AGENTS=$HOME/Library/LaunchAgents
 DOMAIN=gui/$(id -u)
 BRIDGE=local.codex-bridge
@@ -37,6 +38,7 @@ agent() {
   <dict>
     <key>CODEX_BRIDGE_ROOTS</key><string>$CODEX_BRIDGE_ROOTS</string>
     <key>CODEX_BRIDGE_STATE</key><string>$STATE</string>
+    <key>CODEX_BRIDGE_PORT</key><string>$PORT</string>
     <key>PATH</key><string>$PATH</string>
   </dict>
   <key>WorkingDirectory</key><string>$STATE</string>
@@ -56,7 +58,8 @@ agent "$BRIDGE" "$(command -v node)" "$DIR/server.mjs"
 
 TC=${TUNNEL_CLIENT:-$(command -v tunnel-client || true)}
 if [ -n "$TC" ] && [ -f "$STATE/tunnel.yaml" ]; then
-  agent "$TUNNEL" "$TC" run --profile-file "$STATE/tunnel.yaml"
+  # wait for the bridge first: a tunnel that starts early fails OAuth discovery and stays at readyz 503
+  agent "$TUNNEL" /bin/sh -c "until curl -fs -o /dev/null http://127.0.0.1:$PORT/health; do sleep 1; done; exec '$TC' run --profile-file '$STATE/tunnel.yaml'"
 else
   echo "skipped tunnel: needs tunnel-client on PATH and $STATE/tunnel.yaml (README, ChatGPT 연결 절)"
 fi
