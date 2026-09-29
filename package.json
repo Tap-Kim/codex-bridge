@@ -1,0 +1,18 @@
+{
+  "name": "codex-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP bridge: web ChatGPT -> OpenAI Secure MCP Tunnel -> local files + Codex CLI",
+  "license": "MIT",
+  "repository": "github:Tap-Kim/codex-bridge",
+  "bin": { "codex-bridge": "server.mjs" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  }
+}

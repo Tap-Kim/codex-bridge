@@ -1,0 +1,22 @@
+# tunnel-client profile for codex-bridge. Copy to ~/.codex-bridge/tunnel.yaml and
+# replace the two REPLACE_ME values. `file:` paths must be absolute.
+config_version: 1
+control_plane:
+  base_url: "https://api.openai.com"
+  tunnel_id: "tunnel_REPLACE_ME"                          # platform.openai.com -> Tunnels
+  api_key: "file:/Users/REPLACE_ME/.codex-bridge/api_key" # runtime API key, one line, chmod 600
+health:
+  listen_addr: "127.0.0.1:7422"                           # /healthz /readyz /ui
+admin_ui:
+  open_browser: false
+log:
+  level: info
+  format: json
+mcp:
+  server_urls:
+    - channel: main
+      url: "http://127.0.0.1:7421/mcp"
+  extra_headers:
+    # written by codex-bridge on every start: "Bearer <token>"
+    Authorization: "file:/Users/REPLACE_ME/.codex-bridge/auth_header"
+  connection_max_ttl: 10m
