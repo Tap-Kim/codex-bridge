@@ -195,6 +195,7 @@ Codex 작업을 이어받는 흐름:
 |---|---|
 | 커넥터 폼의 터널 목록이 비어 있음 | 터널의 ChatGPT workspaces 에 `account.id` 를 정확히 넣었는지 (2-2 의 2번) |
 | 앱 만들기 버튼이 없음 | 개발자 모드를 켠 뒤 설정이 아니라 <https://chatgpt.com/plugins> 상단을 본다 |
+| `readyz` 가 503, 사유가 `oauth discovery failed ... connection refused` | 로그인 직후 터널이 브릿지보다 먼저 떠서 생기는 표시상 문제다. 툴 호출은 대개 그대로 된다. 브릿지가 뜬 뒤 터널만 재시작: `launchctl kickstart -k gui/$(id -u)/local.codex-bridge.tunnel` |
 | ChatGPT 가 툴을 못 부름 | `curl -s 127.0.0.1:7422/readyz` 가 200 인지, `curl -s 127.0.0.1:7421/health` 가 ok 인지 |
 | `401 unauthorized` | 토큰을 바꿨는데 Codex·Claude 설정의 헤더를 안 바꾼 경우. tunnel-client 는 `auth_header` 파일을 읽으므로 브릿지 재시작만 하면 된다 |
 | `outside allowed roots` | `CODEX_BRIDGE_ROOTS` 에 그 폴더가 없음. LaunchAgent 는 스크립트를 다시 실행해야 반영된다 |
