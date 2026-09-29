@@ -23,6 +23,12 @@ up()   { n=0; until curl -fs -o /dev/null "$1"; do n=$((n + 1)); [ "$n" -ge "$2"
 
 : "${CODEX_BRIDGE_ROOTS:?ask the user which folders ChatGPT may touch, then set CODEX_BRIDGE_ROOTS=/abs/a:/abs/b}"
 export CODEX_BRIDGE_ROOTS CODEX_BRIDGE_STATE="$STATE" CODEX_BRIDGE_PORT="$PORT"
+# roots are what a remote ChatGPT chat may read, write and run commands in: keep them narrow
+for r in $(printf '%s' "$CODEX_BRIDGE_ROOTS" | tr ':' ' '); do
+  case $r in /*) ;; *) fail "root must be an absolute path: $r" ;; esac
+  [ -d "$r" ] || fail "root is not a directory: $r"
+  [ "$(cd "$r" && pwd -P)" = "$(cd "$HOME" && pwd -P)" ] || [ "$(cd "$r" && pwd -P)" = / ] && fail "refusing to expose all of $r; pick project folders instead"
+done
 
 # 1. prerequisites, dependencies, token
 command -v node >/dev/null || fail "node not found (need 20+)"

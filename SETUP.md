@@ -15,6 +15,8 @@
 
 ## 0. 사용자에게 물을 것 (한 번에)
 
+먼저 설치가 바꾸는 것을 알려 준다: `~/codex-bridge` (코드), `~/.codex-bridge/` (토큰·키·로그), macOS LaunchAgent `local.codex-bridge`(+ `.tunnel`), 고른 경우 `~/.codex/config.toml` 에 한 절 추가와 `~/.codex/prompts/` 에 두 파일, Claude Code user scope MCP 등록. 사용자가 원하면 실행 전에 `scripts/setup.sh` 를 같이 읽는다.
+
 - ChatGPT·Codex 가 읽고 쓸 수 있게 할 폴더 (예: `/Users/me/work:/Users/me/side`, 콜론 구분)
 - 어디서 쓸지 (복수 선택)
   - **웹 ChatGPT** -> 터널 필요. OpenAI Platform 조직에서 Tunnels 권한이 있어야 한다
@@ -39,6 +41,7 @@ CODEX_BRIDGE_ROOTS="<0단계에서 받은 폴더>" CODEX_BRIDGE_CLIENTS="codex c
 
 - `CODEX_BRIDGE_CLIENTS` 는 0단계에서 고른 로컬 클라이언트만 넣는다 (`codex`, `claude`, 둘 다, 또는 `""`)
 - 스크립트는 여러 번 실행해도 안전하다. 끝난 단계는 건너뛴다
+- `[skip]` 줄은 고르지 않았거나 설치되지 않은 항목이라 정상이다. `[fail]` 은 멈추고 메시지대로 고친다 (허용 루트가 홈 전체나 `/` 이거나, 없는 폴더면 거부된다)
 - 끝에 `LEFT FOR THE HUMAN:` 목록이 나오면 그 항목을 사용자에게 전달한다. `DONE` 이면 이 단계 완료
 
 검증:
@@ -118,5 +121,6 @@ tail -5 ~/.codex-bridge/access.log   # ChatGPT 가 부른 툴 이름이 찍히�
 ~/codex-bridge/scripts/install-launchd.sh uninstall   # 두 LaunchAgent 제거
 claude mcp remove codex-bridge -s user                 # Claude Code 등록 해제
 # Codex: ~/.codex/config.toml 에서 [mcp_servers.codex-bridge] 절 삭제, ~/.codex/prompts/{handoff,bridge}.md 삭제
+# Linux: 직접 띄운 브릿지·tunnel-client 프로세스(systemd --user 유닛, tmux 등)를 멈춘다
 # 토큰·키·프로파일까지 지우려면: rm -rf ~/.codex-bridge
 ```

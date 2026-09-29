@@ -51,7 +51,7 @@ CODEX_BRIDGE_ROOTS="$HOME/work:$HOME/side" npx -y github:Tap-Kim/codex-bridge
 또는 클론해서:
 
 ```bash
-git clone https://github.com/Tap-Kim/codex-bridge.git && cd codex-bridge
+git clone https://github.com/Tap-Kim/codex-bridge.git ~/codex-bridge && cd ~/codex-bridge
 npm install
 CODEX_BRIDGE_ROOTS="$HOME/work:$HOME/side" npm start
 ```
