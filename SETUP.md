@@ -27,6 +27,7 @@
 ```bash
 curl -s 127.0.0.1:7421/health   # {"status":"ok"} 가 나오면 이미 무언가 7421 에서 돌고 있다 -> 멈추고 사용자에게 확인
 node -v                          # v20 이상
+python3 --version                 # v3.9 이상 (Loop Engineering supervisor)
 git --version
 uname                            # Darwin 이면 LaunchAgent 로 상시 실행까지 자동
 ```
@@ -114,6 +115,12 @@ tail -5 ~/.codex-bridge/access.log   # ChatGPT 가 부른 툴 이름이 찍히�
 ```
 
 사용자에게 보고할 것: 허용 루트, 등록한 클라이언트, 터널 readyz 상태, 그리고 README 의 보안 주의 한 줄 (연결된 대화는 허용 루트 안의 파일을 쓰고 허용 명령을 실행할 수 있다).
+
+## Phase 4 Task Graph 사용
+
+설치된 브릿지의 MCP tool 목록에서 `codex_graph_start`, `codex_graph_status`, `codex_graph_resume`, `codex_graph_cancel`을 확인한다. Python 3 supervisor는 Node adapter와 별개로 실행되어 브릿지 재시작 후에도 child 작업을 유지·복구한다.
+
+clean git 저장소 루트에서 task DAG, task별 `write_paths`와 `verify_commands`, graph의 `final_verify_commands`를 제공한다. 각 task는 독립 worktree에서 실행되고 선행 task 통합 이후에 dependent task가 시작된다. 최종 적용 전에 base HEAD와 dirty 상태를 다시 확인하며, 원본에는 commit 없이 diff만 적용한다. `apply_to_base=false` 또는 base 변경이면 `integration_ready`로 멈춘다. 수정 중인 저장소에서는 시작하지 말고, 최초 점검은 별도 임시 git 저장소에서 수행한다. 최종 적용은 Git 잠금 안에서 수행하며 외부 잠금이 있으면 `base_locked`로 멈춘다. 충돌은 반환된 integration worktree에서 수정·stage하고 `codex_graph_resume(resolve_conflict=true)`로 검증 후 재개한다. 직접 commit하지 않는다. submodule은 지원하지 않는다. 예시와 보존/정리 규칙은 [README Task Graph 절](README.md#task-graph--multi-worker)을 참고한다.
 
 ## 제거
 

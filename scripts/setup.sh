@@ -33,6 +33,8 @@ done
 # 1. prerequisites, dependencies, token
 command -v node >/dev/null || fail "node not found (need 20+)"
 [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 20 ] || fail "node 20+ required, found $(node -v)"
+command -v python3 >/dev/null || fail "python3 not found (need 3.9+ for Loop Engineering supervisor)"
+python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' || fail "python 3.9+ required, found $(python3 --version 2>&1)"
 command -v git >/dev/null || fail "git not found"
 (cd "$DIR" && npm ci --omit=dev --no-audit --no-fund --silent) || fail "npm ci failed in $DIR"
 node -e "import('$DIR/server.mjs')" # importing (not running) creates $STATE/token and auth_header

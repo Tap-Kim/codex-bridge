@@ -19,6 +19,13 @@ if [ "${1:-}" = uninstall ]; then
   remove "$BRIDGE"; remove "$TUNNEL"; echo "removed $BRIDGE, $TUNNEL"; exit 0
 fi
 
+if [ "${1:-}" = restart ]; then
+  # Delay the kickstart so an MCP request can return before this server is killed.
+  /bin/sh -c "sleep 1; /bin/launchctl kickstart -k '$DOMAIN/$BRIDGE'" >/dev/null 2>&1 &
+  echo "scheduled restart for $BRIDGE"
+  exit 0
+fi
+
 : "${CODEX_BRIDGE_ROOTS:?set CODEX_BRIDGE_ROOTS to the folders ChatGPT may touch, e.g. \$HOME/work:\$HOME/side}"
 mkdir -p "$AGENTS" "$STATE/logs"
 
