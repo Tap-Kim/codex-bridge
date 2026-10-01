@@ -238,8 +238,11 @@ def process_alive(pid):
     try:
         os.kill(int(pid), 0)
         return True
-    except OSError:
+    except ProcessLookupError:
         return False
+    except OSError:
+        # An unobservable persisted child must not be treated as exited.
+        return True
 
 
 def spawn_worker(loop_id):
@@ -333,57 +336,79 @@ def cmd_create():
     emit(snapshot(state))
 
 
-def stale_to_interrupted(state):
-    if state.get("status") in ACTIVE and not lock_held(state["loop_id"]):
-        # create/resume spawns the detached worker asynchronously. Give it a
-        # short lease to acquire its flock before declaring the loop stale.
-        spawned_at = state.get("worker_spawned_at") or state.get("updated_at")
-        if age_seconds(spawned_at) < 2.0:
-            return state
-        state["status"] = "interrupted"
+def reconcile_stale(state):
+    """Called while holding the worker lock; preserve uncertain child ownership."""
+    if state.get("status") in ACTIVE and age_seconds(state.get("worker_spawned_at") or state.get("updated_at")) >= 2:
         state["owner_pid"] = None
-        state["child_pid"] = None
-        state["child_pgid"] = None
-        state["active_job_id"] = None
-        state["last_error"] = state.get("last_error") or error_obj("process", "Loop worker stopped while the loop was active.")
-        history(state, "interrupted", recoverable=True)
+        if process_alive(state.get("child_pid")):
+            state["status"] = "blocked"
+            state["blocked_reason"] = "orphan_child_alive"
+            state["last_error"] = error_obj("process", "Previous worker stopped but its recorded child may still be alive; refusing concurrent replay.")
+            history(state, "orphan_child_alive", child_pid=state.get("child_pid"))
+        else:
+            state["status"] = "interrupted"
+            state["child_pid"] = None
+            state["child_pgid"] = None
+            state["active_job_id"] = None
+            state["last_error"] = state.get("last_error") or error_obj("process", "Loop worker stopped while the loop was active.")
+            history(state, "interrupted", recoverable=True)
         write_state(state)
     return state
 
 
+def stale_to_interrupted(state):
+    lock = try_lock(state["loop_id"])
+    if lock is None:
+        return load_state(state["loop_id"])
+    try:
+        return reconcile_stale(load_state(state["loop_id"]))
+    finally:
+        lock.close()
+
+
 def cmd_status(loop_id):
-    state = stale_to_interrupted(load_state(loop_id))
-    emit(snapshot(state))
+    emit(snapshot(stale_to_interrupted(load_state(loop_id))))
 
 
 def cmd_resume(loop_id):
     cfg = read_input()
-    state = stale_to_interrupted(load_state(loop_id))
-    if "verify_commands" in cfg:
-        allow = set(state.get("allow_commands") or DEFAULT_ALLOW.split(","))
-        commands = cfg.get("verify_commands") or []
-        for spec in commands:
-            if spec.get("command") not in allow:
-                raise ValueError("verifier command not allowed: " + str(spec.get("command")))
-        state["verify_commands"] = commands
-        write_state(state)
-    if state["status"] in {"completed", "cancelled"}:
-        emit(snapshot(state))
-        return
-    if state["status"] == "blocked" and state.get("attempts", 0) >= state.get("max_attempts", 1):
-        emit(snapshot(state))
-        return
-    if state["status"] == "verification_required" and not state.get("verify_commands"):
-        emit(snapshot(state))
-        return
-    if lock_held(loop_id):
+    lock = try_lock(loop_id)
+    if lock is None:
         emit(snapshot(load_state(loop_id)))
         return
-    state["status"] = "repairing" if state.get("thread_id") else "running"
-    state["owner_pid"] = None
-    state["worker_spawned_at"] = now()
-    history(state, "manual_resume", has_thread=bool(state.get("thread_id")))
-    write_state(state)
+    try:
+        state = reconcile_stale(load_state(loop_id))
+        if state.get("blocked_reason") == "orphan_child_alive":
+            if process_alive(state.get("child_pid")):
+                emit(snapshot(state))
+                return
+            state.update(status="interrupted", blocked_reason=None, child_pid=None, child_pgid=None, active_job_id=None)
+            if state.get("attempts", 0) >= state.get("max_attempts", 1):
+                state["status"] = "blocked"
+                history(state, "blocked", reason="max_attempts")
+                write_state(state)
+                emit(snapshot(state))
+                return
+        if "verify_commands" in cfg:
+            allow = set(state.get("allow_commands") or DEFAULT_ALLOW.split(","))
+            commands = cfg.get("verify_commands") or []
+            for spec in commands:
+                if spec.get("command") not in allow:
+                    raise ValueError("verifier command not allowed: " + str(spec.get("command")))
+            state["verify_commands"] = commands
+        if state["status"] in {"completed", "cancelled"} or (state["status"] == "blocked" and state.get("attempts", 0) >= state.get("max_attempts", 1)):
+            emit(snapshot(state))
+            return
+        if state["status"] == "verification_required" and not state.get("verify_commands"):
+            emit(snapshot(state))
+            return
+        state["status"] = "repairing" if state.get("thread_id") else "running"
+        state["owner_pid"] = None
+        state["worker_spawned_at"] = now()
+        history(state, "manual_resume", has_thread=bool(state.get("thread_id")))
+        write_state(state)
+    finally:
+        lock.close()
     spawn_worker(loop_id)
     emit(snapshot(state))
 
@@ -463,17 +488,28 @@ def cmd_cancel(loop_id):
 def cmd_recover():
     recovered = []
     for p in loops_dir().glob("*.json"):
+        lock = None
         try:
-            state = stale_to_interrupted(json.loads(p.read_text()))
-            if state.get("status") == "interrupted":
-                state["status"] = "repairing" if state.get("thread_id") else "running"
-                state["worker_spawned_at"] = now()
-                history(state, "startup_recovery", has_thread=bool(state.get("thread_id")))
-                write_state(state)
-                spawn_worker(state["loop_id"])
-                recovered.append(state["loop_id"])
+            loop_id = p.stem
+            lock = try_lock(loop_id)
+            if lock is None:
+                continue
+            state = reconcile_stale(load_state(loop_id))
+            if state.get("status") != "interrupted":
+                continue
+            state["status"] = "repairing" if state.get("thread_id") else "running"
+            state["worker_spawned_at"] = now()
+            history(state, "startup_recovery", has_thread=bool(state.get("thread_id")))
+            write_state(state)
+            lock.close()
+            lock = None
+            spawn_worker(loop_id)
+            recovered.append(loop_id)
         except Exception:
             continue
+        finally:
+            if lock is not None:
+                lock.close()
     emit({"recovered": recovered})
 
 
@@ -749,6 +785,12 @@ def worker(loop_id):
         state = load_state(loop_id)
         if state.get("status") in TERMINAL and state.get("status") != "interrupted":
             return
+        if process_alive(state.get("child_pid")):
+            state.update(status="blocked", blocked_reason="orphan_child_alive")
+            state["last_error"] = error_obj("process", "Recorded child may still be alive; refusing concurrent replay.")
+            history(state, "orphan_child_alive", child_pid=state.get("child_pid"))
+            write_state(state)
+            return
         state["owner_pid"] = os.getpid()
         history(state, "worker_started", owner_pid=os.getpid())
         write_state(state)
@@ -811,9 +853,10 @@ def worker(loop_id):
         try:
             state = load_state(loop_id)
             state["owner_pid"] = None
-            state["child_pid"] = None
-            state["child_pgid"] = None
-            state["active_job_id"] = None
+            if state.get("blocked_reason") != "orphan_child_alive":
+                state["child_pid"] = None
+                state["child_pgid"] = None
+                state["active_job_id"] = None
             write_state(state)
         except Exception:
             pass

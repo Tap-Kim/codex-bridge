@@ -39,13 +39,21 @@ def alive(pid):
         return True  # Unknown ownership is never treated as idle.
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def probe(url, token=None, post=False):
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != 'http' or parsed.hostname not in {'127.0.0.1', 'localhost', '::1'} or parsed.username or parsed.password:
         return {'ok': False, 'reason': 'invalid_local_url'}
     headers = {'Authorization': 'Bearer ' + token} if token else {}
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers=headers, data=b'' if post else None), timeout=3) as response:
+        # Readiness must come from this exact local endpoint. Redirects could
+        # otherwise forward the runtime bearer token outside the loopback host.
+        opener = urllib.request.build_opener(NoRedirect())
+        with opener.open(urllib.request.Request(url, headers=headers, data=b'' if post else None), timeout=3) as response:
             data = response.read(65537)
             if len(data) > 65536:
                 return {'ok': False, 'reason': 'oversized_response'}

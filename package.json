@@ -9,7 +9,7 @@
   "bin": { "codex-bridge": "server.mjs" },
   "scripts": {
     "start": "node server.mjs",
-    "test": "python3 recovery_test.py && node test.mjs"
+    "test": "python3 recovery_test.py && python3 loop_recovery_test.py && node test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

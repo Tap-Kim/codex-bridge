@@ -1,6 +1,9 @@
 import json
 import tempfile
 import unittest
+import io
+import urllib.response
+from email.message import Message
 from pathlib import Path
 from unittest.mock import patch
 import connection_watchdog as w
@@ -79,9 +82,24 @@ class RecoveryTests(unittest.TestCase):
                 run.assert_not_called()
 
     def test_invalid_target_never_probed(self):
-        with patch.object(w.urllib.request,'urlopen') as open_url:
+        with patch.object(w.urllib.request,'build_opener') as open_url:
             self.assertFalse(w.probe('https://example.com/runtime','private')['ok'])
             open_url.assert_not_called()
+
+    def test_redirect_never_followed(self):
+        for target in ['/redirect-target', 'https://example.com/runtime']:
+            headers = Message()
+            headers['Location'] = target
+            response = urllib.response.addinfourl(io.BytesIO(b''), headers,
+                                                  'http://127.0.0.1/runtime', 302)
+            response.msg = 'Found'
+            # Keep the real opener/error/redirect chain; replace only network I/O.
+            with patch.object(w.urllib.request.HTTPHandler, 'http_open', return_value=response) as request:
+                result = w.probe('http://127.0.0.1/runtime', 'private')
+                self.assertFalse(result['ok'])
+                self.assertEqual(result['code'], 302)
+                self.assertEqual(request.call_count, 1)
+                self.assertEqual(request.call_args[0][0].full_url, 'http://127.0.0.1/runtime')
 
     def test_child_scan_and_recovery_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
